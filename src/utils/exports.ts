@@ -1,4 +1,5 @@
 import type { NestingResult, WoodworkingProject } from '../types/woodworking';
+import { migrateProject } from './project';
 import { formatArea } from './nesting';
 
 function downloadBlob(blob: Blob, filename: string) {
@@ -22,9 +23,9 @@ export function loadProjectFile(file: File): Promise<WoodworkingProject> {
     const reader = new FileReader();
     reader.onload = () => {
       try {
-        const project = JSON.parse(String(reader.result)) as WoodworkingProject;
-        if (!Array.isArray(project.parts) || !Array.isArray(project.stocks)) throw new Error('文件结构不完整');
-        resolve(project);
+        const parsed = JSON.parse(String(reader.result)) as Partial<WoodworkingProject>;
+        if (!Array.isArray(parsed.parts) || !Array.isArray(parsed.stocks)) throw new Error('文件结构不完整');
+        resolve(migrateProject(parsed));
       } catch (error) {
         reject(error);
       }

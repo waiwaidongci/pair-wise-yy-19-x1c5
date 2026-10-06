@@ -2,6 +2,7 @@ import type {
   GrainDirection,
   Joinery,
   JointType,
+  Leftover,
   Part,
   PartKind,
   WoodworkingProject,
@@ -66,6 +67,24 @@ export function createInitialProject(): WoodworkingProject {
     stocks,
     parts,
     joinery,
+    leftovers: [],
+    schemaVersion: 1,
     updatedAt: Date.now(),
+  };
+}
+
+/**
+ * 项目档案升级：旧数据没有余料编号、没有 schemaVersion，
+ * 读回时补成首版（v1），余料字段缺失则补空数组。
+ */
+export function migrateProject(raw: unknown): WoodworkingProject {
+  const project = raw as Partial<WoodworkingProject>;
+  const leftovers = Array.isArray((project as { leftovers?: unknown }).leftovers)
+    ? ((project as { leftovers: Leftover[] }).leftovers)
+    : [];
+  return {
+    ...(project as WoodworkingProject),
+    leftovers,
+    schemaVersion: typeof project.schemaVersion === 'number' ? project.schemaVersion : 1,
   };
 }

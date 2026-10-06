@@ -22,6 +22,7 @@ import {
 import { Download, FileDown, FileJson, FileText, Image, Upload } from 'lucide-react';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { nestingResultAtom, projectAtom, selectedPartIdAtom } from '../stores/project';
+import { getLeftoverLibrary } from '../utils/leftoverLibrary';
 import {
   downloadCutList,
   downloadNestingSvg,
@@ -45,9 +46,15 @@ export function ExportView() {
     setLoading(true);
     try {
       const loaded = await loadProjectFile(file);
+      // 余料库整体替换为载入档案中的余料镜像（内部完成升级补号）。
+      getLeftoverLibrary().replaceAll(loaded.leftovers ?? []);
       setProject(loaded);
       setSelectedId(loaded.parts[0]?.id ?? null);
-      toast({ title: '项目已载入', description: `${loaded.name} · ${loaded.parts.length} 个零件规格`, status: 'success' });
+      toast({
+        title: '项目已载入',
+        description: `${loaded.name} · ${loaded.parts.length} 个零件规格 · ${loaded.leftovers?.length ?? 0} 条余料`,
+        status: 'success',
+      });
     } catch {
       toast({ title: '无法载入项目', description: '请选择由本工具导出的 .joinery.json 文件。', status: 'error' });
     } finally {

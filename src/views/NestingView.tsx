@@ -24,7 +24,7 @@ import { AlertTriangle, RefreshCw, RotateCw } from 'lucide-react';
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import { manualPositionsAtom, nestingResultAtom, projectAtom, revisionAtom } from '../stores/project';
 import { NestingCanvas } from '../components/NestingCanvas';
-import { formatArea } from '../utils/nesting';
+import { clearNestingCache, formatArea } from '../utils/nesting';
 import type { ManualPosition } from '../types/woodworking';
 
 export function NestingView() {
@@ -42,6 +42,7 @@ export function NestingView() {
   };
 
   const rebuild = () => {
+    clearNestingCache();
     setManualPositions({});
     setRevision((value) => value + 1);
     setSelectedKey(null);
@@ -58,8 +59,9 @@ export function NestingView() {
         <Button colorScheme="teal" leftIcon={<RefreshCw size={16} />} onClick={rebuild}>重新排料</Button>
       </Flex>
 
-      <SimpleGrid columns={{ base: 2, lg: 5 }} spacing="10px" mb="14px">
+      <SimpleGrid columns={{ base: 2, lg: 6 }} spacing="10px" mb="14px">
         <Metric label="板材用量" value={`${result.sheetCount} 张`} accent="teal" />
+        <Metric label="余料利用" value={`${result.leftoverCount} 块`} accent="purple" />
         <Metric label="材料利用率" value={`${result.utilization.toFixed(1)}%`} accent={result.utilization > 75 ? 'green' : 'orange'} />
         <Metric label="已排零件" value={`${result.placedParts}/${result.totalParts}`} accent={result.unplaced.length ? 'red' : 'blue'} />
         <Metric label="废料面积" value={formatArea(result.wasteArea)} accent="gray" />
@@ -146,18 +148,31 @@ export function NestingView() {
           </Box>
 
           <Box borderWidth="1px" borderColor="slate.200" borderRadius="10px" bg="white" p="14px">
-            <Text fontSize="12px" fontWeight="800" mb="10px">板材规格</Text>
+            <Text fontSize="12px" fontWeight="800" mb="10px">板材规格与缓存</Text>
             <Stack spacing="9px">
-              {project.stocks.map((stock) => (
-                <Box key={stock.id}>
-                  <Flex justify="space-between" gap="8px">
-                    <Text fontSize="11px" fontWeight="750">{stock.name}</Text>
-                    <Badge variant="outline">{stock.length}×{stock.width}</Badge>
-                  </Flex>
-                  <Progress mt="5px" size="xs" colorScheme="teal" value={Math.min(100, (result.layouts.filter((item) => item.stockId === stock.id).length / Math.max(1, stock.quantity)) * 100)} borderRadius="full" />
-                </Box>
-              ))}
+              {project.stocks.map((stock) => {
+                const cache = result.cacheByStock[stock.id];
+                return (
+                  <Box key={stock.id}>
+                    <Flex justify="space-between" gap="8px" align="center">
+                      <Text fontSize="11px" fontWeight="750">{stock.name}</Text>
+                      <HStack spacing="6px">
+                        {cache && (
+                          <Badge fontSize="8px" colorScheme={cache === 'miss' ? 'orange' : 'green'}>
+                            {cache === 'miss' ? '已重算' : '沿用原结果'}
+                          </Badge>
+                        )}
+                        <Badge variant="outline">{stock.length}×{stock.width}</Badge>
+                      </HStack>
+                    </Flex>
+                    <Progress mt="5px" size="xs" colorScheme="teal" value={Math.min(100, (result.layouts.filter((item) => item.stockId === stock.id && item.kind === 'full').length / Math.max(1, stock.quantity)) * 100)} borderRadius="full" />
+                  </Box>
+                );
+              })}
             </Stack>
+            <Text mt="9px" fontSize="10px" color="slate.500">
+              零件尺寸改动后，仅相关板材的排料图与成本重算，未受牵连的图沿用原结果。
+            </Text>
           </Box>
 
           {result.collisions.length > 0 && (

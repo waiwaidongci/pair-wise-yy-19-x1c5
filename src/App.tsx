@@ -1,12 +1,13 @@
 import { Badge, Box, Button, Flex, HStack, Text } from '@chakra-ui/react';
-import { Boxes, FileOutput, LayoutGrid, Ruler, Settings2 } from 'lucide-react';
+import { Boxes, FileOutput, LayoutGrid, Ruler, Settings2, Layers } from 'lucide-react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useAtom, useAtomValue } from 'jotai';
-import { projectAtom, projectStatsAtom } from './stores/project';
+import { LedgerBridge, projectAtom, projectStatsAtom } from './stores/project';
 
 const navItems = [
   { path: '/design', label: '零件与榫卯', icon: LayoutGrid },
   { path: '/nesting', label: '板材排料', icon: Boxes },
+  { path: '/leftovers', label: '余料库', icon: Layers },
   { path: '/export', label: '清单与交付', icon: FileOutput },
 ];
 
@@ -17,6 +18,7 @@ export default function App() {
 
   return (
     <div className="app-shell">
+      <LedgerBridge />
       <header className="app-header">
         <HStack spacing="10px">
           <Box className="brand-mark"><Ruler size={20} /></Box>
