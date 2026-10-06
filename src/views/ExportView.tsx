@@ -20,8 +20,9 @@ import {
   useToast,
 } from '@chakra-ui/react';
 import { Download, FileDown, FileJson, FileText, Image, Upload } from 'lucide-react';
-import { useAtomValue, useSetAtom } from 'jotai';
+import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import { nestingResultAtom, projectAtom, selectedPartIdAtom } from '../stores/project';
+import { offcutLedgerAtom } from '../stores/offcuts';
 import {
   downloadCutList,
   downloadNestingSvg,
@@ -35,6 +36,7 @@ export function ExportView() {
   const project = useAtomValue(projectAtom);
   const result = useAtomValue(nestingResultAtom);
   const setProject = useSetAtom(projectAtom);
+  const [ledger, setLedger] = useAtom(offcutLedgerAtom);
   const setSelectedId = useSetAtom(selectedPartIdAtom);
   const fileRef = useRef<HTMLInputElement>(null);
   const [loading, setLoading] = useState(false);
@@ -45,9 +47,14 @@ export function ExportView() {
     setLoading(true);
     try {
       const loaded = await loadProjectFile(file);
-      setProject(loaded);
-      setSelectedId(loaded.parts[0]?.id ?? null);
-      toast({ title: '项目已载入', description: `${loaded.name} · ${loaded.parts.length} 个零件规格`, status: 'success' });
+      setProject(loaded.project);
+      if (loaded.ledger) setLedger(loaded.ledger);
+      setSelectedId(loaded.project.parts[0]?.id ?? null);
+      toast({
+        title: '项目已载入',
+        description: `${loaded.project.name} · ${loaded.project.parts.length} 个零件规格${loaded.ledger ? ` · 余料台账 v${loaded.ledger.schemaVersion}（${loaded.ledger.records.length} 块）` : ''}`,
+        status: 'success',
+      });
     } catch {
       toast({ title: '无法载入项目', description: '请选择由本工具导出的 .joinery.json 文件。', status: 'error' });
     } finally {
@@ -59,16 +66,16 @@ export function ExportView() {
   return (
     <main className="page-shell">
       <Box mb="14px">
-        <Text className="eyebrow">STEP 03 · 交付文件</Text>
+        <Text className="eyebrow">STEP 04 · 交付文件</Text>
         <Text className="page-title">切割清单与采购说明</Text>
-        <Text className="page-desc">零件和连接变更已同步到清单及排料结果，可分别交给开料工、采购人员和安装现场。</Text>
+        <Text className="page-desc">零件、余料和连接的变更已同步到清单及排料结果，可分别交给开料工、采购人员和安装现场。</Text>
       </Box>
 
       <SimpleGrid columns={{ base: 1, md: 4 }} spacing="10px" mb="14px">
         <ExportCard icon={<FileText />} title="零件表" description="尺寸、数量、材质、纹理和封边要求" action="导出 CSV" onClick={() => downloadCutList(project)} />
-        <ExportCard icon={<Image />} title="排料图" description={`${result.sheetCount} 张板 · 利用率 ${result.utilization.toFixed(1)}%`} action="导出 SVG" onClick={() => downloadNestingSvg(project, result)} />
+        <ExportCard icon={<Image />} title="排料图" description={`${result.sheetCount} 张新板 · 余料 ${result.offcutCount} 块 · 利用率 ${result.utilization.toFixed(1)}%`} action="导出 SVG" onClick={() => downloadNestingSvg(project, result)} />
         <ExportCard icon={<Download />} title="采购用料说明" description={`预计 ￥${result.purchaseCost.toFixed(0)} · 废料 ${formatArea(result.wasteArea)}`} action="导出 TXT" onClick={() => downloadPurchaseList(project, result)} />
-        <ExportCard icon={<FileJson />} title="项目文件" description="保留全部零件、榫卯和板材参数" action="保存 JSON" onClick={() => downloadProject(project)} />
+        <ExportCard icon={<FileJson />} title="项目文件" description="保留全部零件、榫卯、板材参数和余料台账" action="保存 JSON" onClick={() => downloadProject(project, ledger)} />
       </SimpleGrid>
 
       <Grid templateColumns={{ base: '1fr', xl: 'minmax(0, 1fr) 300px' }} gap="14px" alignItems="start">
@@ -135,9 +142,10 @@ export function ExportView() {
 
           <Box borderWidth="1px" borderColor="slate.200" borderRadius="10px" bg="teal.900" color="white" p="14px">
             <Text fontSize="12px" fontWeight="800">采购摘要</Text>
-            <Text mt="10px" fontSize="28px" fontWeight="900">{result.sheetCount}<span style={{ fontSize: 12 }}> 张板材</span></Text>
+            <Text mt="10px" fontSize="28px" fontWeight="900">{result.sheetCount}<span style={{ fontSize: 12 }}> 张新板</span></Text>
             <Divider my="10px" borderColor="teal.700" />
-            <HStack justify="space-between" fontSize="11px"><span>材料利用率</span><b>{result.utilization.toFixed(1)}%</b></HStack>
+            <HStack justify="space-between" fontSize="11px"><span>余料利用</span><b>{result.offcutCount} 块 · {formatArea(result.offcutArea)}</b></HStack>
+            <HStack mt="7px" justify="space-between" fontSize="11px"><span>材料利用率</span><b>{result.utilization.toFixed(1)}%</b></HStack>
             <HStack mt="7px" justify="space-between" fontSize="11px"><span>废料面积</span><b>{formatArea(result.wasteArea)}</b></HStack>
             <HStack mt="7px" justify="space-between" fontSize="11px"><span>预计成本</span><b>￥{result.purchaseCost.toFixed(2)}</b></HStack>
           </Box>

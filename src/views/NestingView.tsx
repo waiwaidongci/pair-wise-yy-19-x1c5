@@ -3,26 +3,22 @@ import {
   Badge,
   Box,
   Button,
-  Divider,
   Flex,
   FormControl,
   FormLabel,
   Grid,
-  GridItem,
   HStack,
   NumberInput,
   NumberInputField,
   Progress,
-  Select,
   SimpleGrid,
   Stack,
-  Switch,
   Text,
-  Tooltip,
 } from '@chakra-ui/react';
 import { AlertTriangle, RefreshCw, RotateCw } from 'lucide-react';
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import { manualPositionsAtom, nestingResultAtom, projectAtom, revisionAtom } from '../stores/project';
+import { offcutLedgerAtom } from '../stores/offcuts';
 import { NestingCanvas } from '../components/NestingCanvas';
 import { formatArea } from '../utils/nesting';
 import type { ManualPosition } from '../types/woodworking';
@@ -30,6 +26,7 @@ import type { ManualPosition } from '../types/woodworking';
 export function NestingView() {
   const [project, setProject] = useAtom(projectAtom);
   const [manualPositions, setManualPositions] = useAtom(manualPositionsAtom);
+  const ledger = useAtomValue(offcutLedgerAtom);
   const setRevision = useSetAtom(revisionAtom);
   const result = useAtomValue(nestingResultAtom);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
@@ -47,19 +44,26 @@ export function NestingView() {
     setSelectedKey(null);
   };
 
+  const boardLabel = selected
+    ? selected.offcutCode
+      ? `余料 ${selected.offcutCode}`
+      : `第 ${selected.sheetIndex + 1} 张新板`
+    : '';
+
   return (
     <main className="page-shell">
       <Flex justify="space-between" align="end" mb="14px" gap="12px" wrap="wrap">
         <Box>
-          <Text className="eyebrow">STEP 02 · 板材排料</Text>
+          <Text className="eyebrow">STEP 03 · 板材排料</Text>
           <Text className="page-title">排料图与利用率</Text>
-          <Text className="page-desc">算法按纹理限制、锯缝和修边余量自动排布；拖动零件可做最后的人工调整。</Text>
+          <Text className="page-desc">排零件时先放进余料，放不下再开新板；零件尺寸改动后受牵连的排料图和成本立即重算，没受牵连的沿用原结果。</Text>
         </Box>
         <Button colorScheme="teal" leftIcon={<RefreshCw size={16} />} onClick={rebuild}>重新排料</Button>
       </Flex>
 
-      <SimpleGrid columns={{ base: 2, lg: 5 }} spacing="10px" mb="14px">
-        <Metric label="板材用量" value={`${result.sheetCount} 张`} accent="teal" />
+      <SimpleGrid columns={{ base: 2, lg: 6 }} spacing="10px" mb="14px">
+        <Metric label="新开板材" value={`${result.sheetCount} 张`} accent="teal" />
+        <Metric label="余料利用" value={`${result.offcutCount} 块`} accent={result.offcutCount ? 'green' : 'gray'} />
         <Metric label="材料利用率" value={`${result.utilization.toFixed(1)}%`} accent={result.utilization > 75 ? 'green' : 'orange'} />
         <Metric label="已排零件" value={`${result.placedParts}/${result.totalParts}`} accent={result.unplaced.length ? 'red' : 'blue'} />
         <Metric label="废料面积" value={formatArea(result.wasteArea)} accent="gray" />
@@ -94,6 +98,9 @@ export function NestingView() {
               </FormControl>
             </Grid>
             <Text mt="9px" fontSize="10px" color="slate.500">计算耗时 {result.elapsedMs} ms · 当前共 {project.parts.length} 个零件规格</Text>
+            {result.reusedStocks.length > 0 && (
+              <Text mt="5px" fontSize="10px" color="teal.700">未受改动影响，沿用原结果：{result.reusedStocks.join('、')}</Text>
+            )}
           </Box>
 
           <Box borderWidth="1px" borderColor="slate.200" borderRadius="10px" bg="white" p="14px">
@@ -104,23 +111,24 @@ export function NestingView() {
             {selected && selectedPart ? (
               <Stack spacing="10px">
                 <Text fontSize="13px" fontWeight="800">{selectedPart.name} #{selected.instance + 1}</Text>
-                <Text fontSize="10px" color="slate.500">板材：{project.stocks.find((stock) => stock.id === selected.stockId)?.name} · 第 {selected.sheetIndex + 1} 张</Text>
+                <Text fontSize="10px" color="slate.500">板材：{project.stocks.find((stock) => stock.id === selected.stockId)?.name} · {boardLabel}</Text>
                 <Grid templateColumns="1fr 1fr" gap="8px">
                   <FormControl>
                     <FormLabel fontSize="10px">X 坐标 (mm)</FormLabel>
-                    <NumberInput value={selected.x} step={5} min={0} onChange={(_, value) => updateManual(selected.key, { ...manualPositions[selected.key], sheetIndex: selected.sheetIndex, x: value || 0, y: selected.y, rotated: selected.rotated })}>
+                    <NumberInput value={selected.x} step={5} min={0} onChange={(_, value) => updateManual(selected.key, { boardKey: selected.boardKey, sheetIndex: selected.sheetIndex, x: value || 0, y: selected.y, rotated: selected.rotated })}>
                       <NumberInputField />
                     </NumberInput>
                   </FormControl>
                   <FormControl>
                     <FormLabel fontSize="10px">Y 坐标 (mm)</FormLabel>
-                    <NumberInput value={selected.y} step={5} min={0} onChange={(_, value) => updateManual(selected.key, { ...manualPositions[selected.key], sheetIndex: selected.sheetIndex, x: selected.x, y: value || 0, rotated: selected.rotated })}>
+                    <NumberInput value={selected.y} step={5} min={0} onChange={(_, value) => updateManual(selected.key, { boardKey: selected.boardKey, sheetIndex: selected.sheetIndex, x: selected.x, y: value || 0, rotated: selected.rotated })}>
                       <NumberInputField />
                     </NumberInput>
                   </FormControl>
                 </Grid>
                 <HStack>
                   <Button size="xs" variant="outline" leftIcon={<RotateCw size={13} />} isDisabled={selectedPart.grain !== 'none'} onClick={() => updateManual(selected.key, {
+                    boardKey: selected.boardKey,
                     sheetIndex: selected.sheetIndex,
                     x: selected.x,
                     y: selected.y,
@@ -146,17 +154,24 @@ export function NestingView() {
           </Box>
 
           <Box borderWidth="1px" borderColor="slate.200" borderRadius="10px" bg="white" p="14px">
-            <Text fontSize="12px" fontWeight="800" mb="10px">板材规格</Text>
+            <Text fontSize="12px" fontWeight="800" mb="10px">板材与余料</Text>
             <Stack spacing="9px">
-              {project.stocks.map((stock) => (
-                <Box key={stock.id}>
-                  <Flex justify="space-between" gap="8px">
-                    <Text fontSize="11px" fontWeight="750">{stock.name}</Text>
-                    <Badge variant="outline">{stock.length}×{stock.width}</Badge>
-                  </Flex>
-                  <Progress mt="5px" size="xs" colorScheme="teal" value={Math.min(100, (result.layouts.filter((item) => item.stockId === stock.id).length / Math.max(1, stock.quantity)) * 100)} borderRadius="full" />
-                </Box>
-              ))}
+              {project.stocks.map((stock) => {
+                const available = ledger.records.filter((offcut) => offcut.stockId === stock.id && offcut.status === 'available').length;
+                const used = result.layouts.filter((layout) => layout.source === 'offcut' && layout.stockId === stock.id).length;
+                return (
+                  <Box key={stock.id}>
+                    <Flex justify="space-between" gap="8px">
+                      <Text fontSize="11px" fontWeight="750">{stock.name}</Text>
+                      <Badge variant="outline">{stock.length}×{stock.width}</Badge>
+                    </Flex>
+                    <Flex justify="space-between" align="center" mt="3px">
+                      <Progress flex="1" mr="8px" size="xs" colorScheme="teal" value={Math.min(100, (result.layouts.filter((item) => item.source === 'sheet' && item.stockId === stock.id).length / Math.max(1, stock.quantity)) * 100)} borderRadius="full" />
+                      <Text fontSize="9px" color={available ? 'green.600' : 'slate.400'}>余料 {available} 块{used ? ` · 已用 ${used}` : ''}</Text>
+                    </Flex>
+                  </Box>
+                );
+              })}
             </Stack>
           </Box>
 
@@ -189,4 +204,3 @@ function Metric({ label, value, accent }: { label: string; value: string; accent
     </Box>
   );
 }
-

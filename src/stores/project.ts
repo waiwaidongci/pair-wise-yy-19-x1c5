@@ -2,6 +2,7 @@ import { atom } from 'jotai';
 import { atomWithStorage } from 'jotai/utils';
 import { createInitialProject } from '../utils/project';
 import { nestProject } from '../utils/nesting';
+import { offcutLedgerAtom } from './offcuts';
 import type { ManualPosition, WoodworkingProject } from '../types/woodworking';
 
 export const projectAtom = atomWithStorage<WoodworkingProject>(
@@ -18,8 +19,9 @@ export const selectedPartIdAtom = atom<string | null>('part-side-l');
 export const selectedJointIdAtom = atom<string | null>(null);
 export const revisionAtom = atom(0);
 
+/** 余料库、零件和排料图在这里接成同一份开料账：任一变动都会让结果整体重算 */
 export const nestingResultAtom = atom((get) =>
-  nestProject(get(projectAtom), get(manualPositionsAtom)),
+  nestProject(get(projectAtom), get(manualPositionsAtom), get(offcutLedgerAtom).records),
 );
 
 export const selectedPartAtom = atom((get) => {

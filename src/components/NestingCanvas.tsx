@@ -24,13 +24,13 @@ export function NestingCanvas({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [width, setWidth] = useState(1000);
   const dragRef = useRef<{ key: string; offsetX: number; offsetY: number } | null>(null);
-  const layoutHeights = result.layouts.map((layout) => Math.round((layout.stock.width / layout.stock.length) * width) + 62);
+  const layoutHeights = result.layouts.map((layout) => Math.round((layout.boardWidth / layout.boardLength) * width) + 62);
   const totalHeight = Math.max(520, layoutHeights.reduce((sum, height) => sum + height, 0) + 20);
   const layoutOffsets = useMemo(() => {
     let offset = 0;
     return result.layouts.map((layout) => {
       const current = { layout, offset };
-      offset += Math.round((layout.stock.width / layout.stock.length) * width) + 62;
+      offset += Math.round((layout.boardWidth / layout.boardLength) * width) + 62;
       return current;
     });
   }, [result.layouts, width]);
@@ -59,33 +59,43 @@ export function NestingCanvas({
     context.fillRect(0, 0, width, totalHeight);
 
     layoutOffsets.forEach(({ layout, offset }) => {
-      const scale = width / layout.stock.length;
-      const sheetHeight = layout.stock.width * scale;
+      const scale = width / layout.boardLength;
+      const sheetHeight = layout.boardWidth * scale;
+      const isOffcut = layout.source === 'offcut';
       context.save();
       context.translate(0, offset);
-      context.fillStyle = '#334155';
+      context.fillStyle = isOffcut ? '#276749' : '#334155';
       context.font = '800 12px "Avenir Next", sans-serif';
-      context.fillText(`${layout.stock.name} · 第 ${layout.sheetIndex + 1} 张`, 12, 18);
+      const title = isOffcut
+        ? `余料 ${layout.offcut?.code ?? ''} · ${layout.stock.name}`
+        : `${layout.stock.name} · 第 ${layout.sheetIndex + 1} 张`;
+      context.fillText(title, 12, 18);
       context.fillStyle = '#64748b';
       context.font = '10px "Avenir Next", sans-serif';
-      context.fillText(`${layout.stock.length} × ${layout.stock.width} × ${layout.stock.thickness} mm`, 240, 18);
+      context.fillText(
+        `${layout.boardLength} × ${layout.boardWidth} × ${layout.stock.thickness} mm${isOffcut ? ' · 不计新购成本' : ''}`,
+        240,
+        18,
+      );
 
-      context.fillStyle = '#f2dfb6';
-      context.strokeStyle = '#8b6f47';
+      context.fillStyle = isOffcut ? '#e3efd9' : '#f2dfb6';
+      context.strokeStyle = isOffcut ? '#5a8a68' : '#8b6f47';
       context.lineWidth = 3;
       context.fillRect(0, 30, width, sheetHeight);
       context.strokeRect(0, 30, width, sheetHeight);
 
-      context.setLineDash([6, 5]);
-      context.strokeStyle = '#b59a72';
-      context.lineWidth = 1;
-      context.strokeRect(
-        project.trim * scale,
-        30 + project.trim * scale,
-        (layout.stock.length - project.trim * 2) * scale,
-        (layout.stock.width - project.trim * 2) * scale,
-      );
-      context.setLineDash([]);
+      if (layout.trim > 0) {
+        context.setLineDash([6, 5]);
+        context.strokeStyle = '#b59a72';
+        context.lineWidth = 1;
+        context.strokeRect(
+          layout.trim * scale,
+          30 + layout.trim * scale,
+          (layout.boardLength - layout.trim * 2) * scale,
+          (layout.boardWidth - layout.trim * 2) * scale,
+        );
+        context.setLineDash([]);
+      }
 
       layout.placements.forEach((placement) => {
         const part = project.parts.find((item) => item.id === placement.partId);
@@ -131,8 +141,8 @@ export function NestingCanvas({
 
   function findPlacement(point: { x: number; y: number }) {
     for (const { layout, offset } of layoutOffsets) {
-      if (point.y < offset + 30 || point.y > offset + 30 + layout.stock.width * (width / layout.stock.length)) continue;
-      const scale = width / layout.stock.length;
+      if (point.y < offset + 30 || point.y > offset + 30 + layout.boardWidth * (width / layout.boardLength)) continue;
+      const scale = width / layout.boardLength;
       return [...layout.placements].reverse().find((placement) => {
         const x = placement.x * scale;
         const y = offset + 30 + placement.y * scale;
@@ -142,14 +152,18 @@ export function NestingCanvas({
     return null;
   }
 
+  function findLayout(boardKey: string) {
+    return result.layouts.find((item) => item.boardKey === boardKey);
+  }
+
   function handlePointerDown(event: ReactPointerEvent<HTMLCanvasElement>) {
     const point = toCanvasPoint(event);
     const placement = findPlacement(point);
     if (!placement) return;
     onSelect(placement.key);
-    const layout = result.layouts.find((item) => item.stockId === placement.stockId && item.sheetIndex === placement.sheetIndex);
+    const layout = findLayout(placement.boardKey);
     if (!layout) return;
-    const scale = width / layout.stock.length;
+    const scale = width / layout.boardLength;
     const x = placement.x * scale;
     const y = 30 + placement.y * scale;
     dragRef.current = { key: placement.key, offsetX: point.x - x, offsetY: point.y - y };
@@ -160,15 +174,16 @@ export function NestingCanvas({
     if (!dragRef.current) return;
     const placement = result.placements.find((item) => item.key === dragRef.current?.key);
     if (!placement) return;
-    const layout = result.layouts.find((item) => item.stockId === placement.stockId && item.sheetIndex === placement.sheetIndex);
+    const layout = findLayout(placement.boardKey);
     if (!layout) return;
     const point = toCanvasPoint(event);
-    const scale = width / layout.stock.length;
-    const offset = layoutOffsets.find((item) => item.layout.stockId === layout.stockId && item.layout.sheetIndex === layout.sheetIndex)?.offset ?? 0;
-    const x = Math.max(project.trim, Math.min(layout.stock.length - project.trim - placement.width, (point.x - dragRef.current.offsetX) / scale));
-    const y = Math.max(project.trim, Math.min(layout.stock.width - project.trim - placement.height, (point.y - offset - 30 - dragRef.current.offsetY) / scale));
+    const scale = width / layout.boardLength;
+    const offset = layoutOffsets.find((item) => item.layout.boardKey === layout.boardKey)?.offset ?? 0;
+    const x = Math.max(layout.trim, Math.min(layout.boardLength - layout.trim - placement.width, (point.x - dragRef.current.offsetX) / scale));
+    const y = Math.max(layout.trim, Math.min(layout.boardWidth - layout.trim - placement.height, (point.y - offset - 30 - dragRef.current.offsetY) / scale));
     onMove(placement.key, {
-      sheetIndex: placement.sheetIndex,
+      boardKey: layout.boardKey,
+      sheetIndex: layout.sheetIndex,
       x: Math.round(x / 5) * 5,
       y: Math.round(y / 5) * 5,
       rotated: placement.rotated,
@@ -198,9 +213,9 @@ export function NestingCanvas({
       <HStack position="sticky" bottom="0" px="12px" py="7px" bg="rgba(255,255,255,.92)" borderTopWidth="1px" fontSize="10px" color="slate.600">
         <Text>拖动零件微调位置，自动吸附 5 mm</Text>
         <Text>● 橙色点表示手动位置</Text>
+        <Text>绿色板面为余料</Text>
         {selectedKey && <Text color="teal.700">已选：{selectedKey}</Text>}
       </HStack>
     </Box>
   );
 }
-

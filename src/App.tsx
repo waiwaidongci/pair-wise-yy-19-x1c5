@@ -1,11 +1,12 @@
 import { Badge, Box, Button, Flex, HStack, Text } from '@chakra-ui/react';
-import { Boxes, FileOutput, LayoutGrid, Ruler, Settings2 } from 'lucide-react';
+import { Boxes, FileOutput, Layers, LayoutGrid, Ruler, Settings2 } from 'lucide-react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useAtom, useAtomValue } from 'jotai';
 import { projectAtom, projectStatsAtom } from './stores/project';
 
 const navItems = [
   { path: '/design', label: '零件与榫卯', icon: LayoutGrid },
+  { path: '/offcuts', label: '余料库', icon: Layers },
   { path: '/nesting', label: '板材排料', icon: Boxes },
   { path: '/export', label: '清单与交付', icon: FileOutput },
 ];
@@ -37,7 +38,7 @@ export default function App() {
           })}
         </HStack>
         <HStack justifySelf="end">
-          <Badge colorScheme="teal" variant="subtle">{stats.result.sheetCount} 张板 · {stats.result.utilization.toFixed(1)}%</Badge>
+          <Badge colorScheme="teal" variant="subtle">{stats.result.sheetCount} 张新板 · 余料 {stats.result.offcutCount} 块 · {stats.result.utilization.toFixed(1)}%</Badge>
           <Button size="xs" variant="ghost" color="slate.300" leftIcon={<Settings2 size={14} />} onClick={() => {
             setProject((current) => ({ ...current, updatedAt: Date.now() }));
           }}>保存状态</Button>
